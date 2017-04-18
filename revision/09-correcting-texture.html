@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>correcting texture</title>
+
+<style>
+	*{
+		padding: 0;
+		margin: 0;
+	}
+	
+	#canvas{
+		display: block;
+	}
+</style>
+</head>
+
+<body onload='initWebGL()'>
+
+	<canvas id='canvas'>Sorry your browser does not support Canvas API.</canvas>
+ 
+<script src='js/gl-matrix-min.js'></script>
+<script src='js/raf_polyfill'></script>
+<script type='x-shader/x-vertex' id='shader-vs'>
+	attribute vec3 aVertexPosition;
+	attribute vec2 aVertexTexCoord;
+	
+	uniform mat4 uMVMatrix;
+	uniform mat4 uPMatrix;
+	
+	varying highp vec2 vTextureCoord;
+	
+	void main (void) {
+		gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		vTextureCoord = aVertexTexCoord;
+	}
+</script>
+<script type='x-shader/x-fragment' id='shader-fs'>
+	varying highp vec2 vTextureCoord;
+	uniform sampler2D uSampler;
+	void main (void) {
+		gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.st));
+	}
+</script>
+<script>
+
+	'use strict';
+	
+	var gl = null,
+		canvas = null,
+		glProgram = null,
+		fragmentShader = null,
+		vertexShader = null;
+	
+	var vertexPositionAttribute = null,
+		vertexTexCoordAttribute = null,
+		trianglesVerticesBuffer = null,
+		trianglesTexCoordBuffer = null,
+		trianglesVerticesIndexBuffer = null;
+	
+	var mvMatrix = mat4.create(),
+		pMatrix = mat4.create();
+	
+	var angle = 0.0;
+	
+	function initWebGL () {
+		canvas = document.getElementById('canvas');
+		canvas.width = window.innerWidth;
+		canvas.height = window.innerHeight;
+		
+		try {
+			gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+		} catch (e) {}
+		
+		if (gl) {
+			initShaders();
+			setupBuffers();
+			getMatrixUniforms();
+			loadTexture();
+			(function animLoop () {
+				setupWebGL();
+				setMatrixUniforms();
+				drawScene();
+				requestAnimationFrame(animLoop, canvas);
+			})();
+		} else {
+			alert('Your browser does not appear to support WebGL');
+		}
+	}
+	
+	function setupWebGL () {
+		gl.clearColor(0.1, 0.5, 0.1, 1.0);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		gl.enable(gl.DEPTH_TEST);
+		
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, pMatrix);
+		mat4.identity(mvMatrix);
+		mat4.translate(mvMatrix, [-1.0, -1.0, -7.0]);
+		mat4.rotate(mvMatrix, angle, [0.0, 1.0, 0.0]);
+		angle += 0.01;
+	}
+	
+	function initShaders () {
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+			
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		vertexShader = makeShader(vs_source,  gl.VERTEX_SHADER);
+		
+		glProgram = gl.createProgram();
+		
+		gl.attachShader(glProgram, fragmentShader);
+		gl.attachShader(glProgram, vertexShader);
+		gl.linkProgram(glProgram);
+		
+		if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+			alert('Unable to initialize the shader program');
+		}
+		gl.useProgram(glProgram);
+	}
+	
+	function makeShader (src, type) {
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+			alert('Error compiling shader: ' + gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	function setupBuffers () {
+		var trianglesVertices = [
+			//front face, from bottom left to right and then to top
+			0.0, 0.0, 0.0,
+			1.0, 0.0, 0.0,
+			2.0, 0.0, 0.0,
+			0.5, 1.0, 0.0,
+			1.5, 1.0, 0.0,
+			1.0, 2.0, 0.0,
+			//rear face
+			0.0, 0.0, -2.0,
+			1.0, 0.0, -2.0,
+			2.0, 0.0, -2.0,
+			0.5, 1.0, -2.0,
+			1.5, 1.0, -2.0,
+			1.0, 2.0, -2.0
+		];
+		
+		var trianglesVerticesIndices = [
+			// front face
+			0, 1, 3,
+			1, 3, 4,
+			1, 2, 4,
+			3, 4, 5,
+			// rear face
+			6, 7, 9,
+			7, 9, 10,
+			7, 8, 10,
+			9, 10, 11,
+			// left side
+			0, 3, 6,
+			3, 6, 9,
+			3, 5, 9,
+			5, 9, 11,
+			// right side
+			2, 4, 8, 
+			4, 8, 10, 
+			4, 5, 10,
+			5, 10, 11,
+			// bottom side
+			0, 6, 8, 
+			8, 2, 0
+		];
+		
+		var trianglesVerticesArray = new Array();
+		var trianglesTexCoordsArray = new Array();
+		
+		for (var i = 0; i < trianglesVerticesIndices.length; ++i) {
+			var a = trianglesVerticesIndices[i];
+			
+			trianglesVerticesArray.push(trianglesVertices[a * 3]);
+			trianglesVerticesArray.push(trianglesVertices[a * 3 + 1]);
+			trianglesVerticesArray.push(trianglesVertices[a * 3 + 2]);
+			 if (i >= 24) {
+				trianglesTexCoordsArray.push(trianglesVertices[a * 3 + 2]);
+				trianglesTexCoordsArray.push(trianglesVertices[a * 3 + 1]);
+			 } else {
+				trianglesTexCoordsArray.push(trianglesVertices[a * 3 ]);
+				trianglesTexCoordsArray.push(trianglesVertices[a * 3 + 1]);
+			 }
+		}
+		
+		trianglesVerticesBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticesBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(trianglesVerticesArray), gl.STATIC_DRAW);
+		
+		trianglesTexCoordBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, trianglesTexCoordBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(trianglesTexCoordsArray), gl.STATIC_DRAW);
+	}
+	
+	var textureImage = null,
+		texture = null;
+	
+	function loadTexture () {
+		textureImage = new Image();
+		textureImage.onload = function () {
+			setupTexture();
+		}
+		textureImage.src = 'img/stone.jpg';
+	}
+	
+	function setupTexture () {
+		texture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImage);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		
+		gl.uniform1i(glProgram.uSampler, 0);
+		
+		if (!gl.isTexture(texture)) {
+			console.log('Error: Texture is invalid');
+		}
+	}
+	
+	function drawScene () {
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticesBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		vertexTexCoordAttribute = gl.getAttribLocation(glProgram, 'aVertexTexCoord');
+		gl.enableVertexAttribArray(vertexTexCoordAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, trianglesTexCoordBuffer);
+		gl.vertexAttribPointer(vertexTexCoordAttribute, 2, gl.FLOAT, false, 0, 0);
+		
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, trianglesVerticesIndexBuffer);
+		gl.drawArrays(gl.TRIANGLES, 0, 18 * 3);
+	}
+	
+	function getMatrixUniforms () {
+		glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, 'uPMatrix');
+		glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, 'uMVMatrix');
+		glProgram.samplerUniform = gl.getUniformLocation(glProgram, 'uSampler');
+	}
+
+	function setMatrixUniforms () {
+		gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+		gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+	}
+	
+</script>
+
+</body>
+</html>

@@ -1,0 +1,164 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-type" content="text/html; charset=utf-8">
+		<title>01-webgl-context</title>
+		<style type="text/css" media="screen">
+			
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		
+		canvas {
+			display: block;
+		}
+		
+		</style>
+	</head>
+	<body onload="initWebGL();">
+		<canvas id='canvas'>This browser does not have support for Canvas API.</canvas>
+		
+		<script src='js/raf_polyfill.js'></script>
+		<script src="js/Utils.js" type="text/javascript" charset="utf-8"></script>
+		<script src="js/Program.js" type="text/javascript" charset="utf-8"></script>
+		<script src="js/gl-matrix-min.js"></script>
+		
+		<script type="text/javascript">
+			
+		'use strict';
+		
+		let gl = null;
+		let program = null;
+		
+		var utils = new Utils();
+		var progUtils = new Program();
+		
+		
+		let attributeList = ['aVertexPosition', 'aVertexColor'];
+		let attribute = [];
+		let uniformList = ['uPMatrix', 'uMVMatrix'];
+		let uniform = [];
+		let matrix = [];
+		let buffer = [];
+		let angle = 0;
+		
+		matrix['uPMatrix'] = mat4.create();
+		matrix['uMVMatrix'] = mat4.create();
+		
+		let vs_source = `
+	    attribute vec3 aVertexPosition;
+	    attribute vec3 aVertexColor;
+  
+			uniform mat4 uMVMatrix;
+			uniform mat4 uPMatrix;
+			
+	    varying highp vec4 vColor;
+	    void main (void) {
+	        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+	        vColor = vec4( aVertexColor, 1.0);
+	    }`;
+		
+		let fs_source = `
+	    varying highp vec4 vColor;
+	    void main (void) {
+	        gl_FragColor = vColor;
+	    }`;
+		
+		
+		function initWebGL () {
+			
+			gl = utils.getGLContext('canvas');
+			
+			progUtils.setContext(gl);
+			progUtils.initShaders(vs_source, fs_source);
+			// attributes must be loaded after program has been loaded
+			utils.loadAttributes(attributeList);
+			utils.getUniforms(uniformList);
+			setupWebGL();
+			utils.setUniforms(uniformList);
+			setupBuffers();
+				(function loop () {
+					setupDynamicBuffers();
+					drawScene();
+					requestAnimationFrame(loop, canvas);
+				})();
+		}
+		
+		function setupWebGL () {
+			gl.clearColor(.8, .8, .8, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			gl.viewport(0, 0, canvas.width, canvas.height);
+			
+			// setup perspective
+			mat4.perspective(45, canvas.width / canvas.height, .1, 100.0, matrix['uPMatrix']);
+			// setup mv
+			mat4.identity(matrix['uMVMatrix']);
+			mat4.translate(matrix['uMVMatrix'], [0, 0, -2.0]);
+		}
+		
+		
+		
+		function setupBuffers () {
+			
+			let verticesColor = [
+				// blue
+				0.0, 0.0, 1.0,
+				// white
+				1.0, 1.0, 1.0,
+				// blue
+				0.0, 0.0, 1.0,
+				// red
+				1.0, 0.0, 0.0,
+				// white
+				1.0, 1.0, 1.0,
+				// red
+				1.0, 0.0, 0.0,
+			];
+			buffer['color'] = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffer['color']);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesColor), gl.STATIC_DRAW);
+		}
+		
+		function setupDynamicBuffers () {
+      var x = Math.sin(angle) / 2.0;
+      
+      var triangleVertices = [
+          // left triangle
+          -0.5 + x, 0.5, -0.5,
+          0.0 + x, 0.0, -0.5,
+          -0.5 + x, -0.5, -0.5,
+          // right triangle
+          0.5 + x, 0.5, 0.5,
+          0.0 + x, 0.0, 0.5,
+          0.5 + x, -0.5, 0.5
+      ];
+      
+      angle += 0.01;
+      
+      buffer['vertex'] = gl.createBuffer();
+      // why not just write gl.createBuffer directly?
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer['vertex']);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangleVertices), gl.DYNAMIC_DRAW);
+		}
+		
+		
+		function drawScene () {
+			
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffer['vertex']);
+			gl.vertexAttribPointer(attribute['aVertexPosition'], 3, gl.FLOAT, false, 0, 0);
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffer['color']);
+			gl.vertexAttribPointer(attribute['aVertexColor'], 3, gl.FLOAT, false, 0, 0);
+			
+			gl.drawArrays(gl.TRIANGLES, 0, 6);
+			
+		}
+		
+		
+		
+		</script>
+	</body>
+</html>

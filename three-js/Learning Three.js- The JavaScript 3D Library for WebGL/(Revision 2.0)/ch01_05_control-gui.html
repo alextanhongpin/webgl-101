@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+<title>control gui</title>
+
+<script src='three.min.js'></script>
+<script src='stats.js'></script>
+<script src='dat.gui.js'></script>
+
+<script src='http://code.jquery.com/jquery-2.1.0.min.js'></script>
+
+<style>
+	body{
+		margin: 0;
+		padding: 0;
+	}
+</style>
+
+<script>
+function initThreeJS(){
+
+	var stats = initStats();
+	
+	var scene = new THREE.Scene();
+	var camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1,1000);
+
+	var renderer = new THREE.WebGLRenderer();
+		renderer.setClearColor(0xeeeeee,1.0);
+		renderer.setSize(window.innerWidth,window.innerHeight);
+		renderer.shadowMapEnabled = true;
+	
+	var planeGeometry = new THREE.PlaneGeometry(60,20);
+	var planeMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+	var plane = new THREE.Mesh(planeGeometry, planeMaterial);
+		plane.receiveShadow = true;
+		
+		plane.rotation.x = -0.5 * Math.PI;
+		plane.position.set(15,0,0);
+		
+	scene.add(plane);
+	
+	var cubeGeometry = new THREE.CubeGeometry(4,4,4);
+	var cubeMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+	var cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+		cube.castShadow = true;
+		cube.position.set(-4,3,0);
+	scene.add(cube);
+	
+	var sphereGeometry = new THREE.SphereGeometry(4,20,20);
+	var sphereMaterial = new THREE.MeshLambertMaterial({ color: 0x7777ff });
+	var sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+		sphere.position.set(20,4,2);
+		sphere.castShadow = true;
+		scene.add(sphere);
+		
+	camera.position.set(-30,40,30);
+	camera.lookAt(scene.position);
+	
+	var ambientLight = new THREE.AmbientLight( 0x0c0c0c );
+	scene.add(ambientLight);
+	
+	var spotLight = new THREE.SpotLight( 0xffffff );
+		spotLight.position.set(-40,60,-10);
+		spotLight.castShadow = true;
+		scene.add( spotLight );
+		
+	$('#ThreeJS').append(renderer.domElement);
+	
+	var step = 0;
+	
+	var controls = new function(){
+		this.rotationSpeed = 0.02;
+		this.bouncingSpeed = 0.03;
+	}
+	
+	var gui = new dat.GUI();
+	gui.add(controls, 'rotationSpeed', 0,0.5);
+	gui.add(controls, 'bouncingSpeed', 0,0.5);
+		
+	render();
+
+	function render(){
+
+		stats.update();
+		cube.rotation.x += controls.rotationSpeed;
+		cube.rotation.y += controls.rotationSpeed;
+		cube.rotation.z += controls.rotationSpeed;
+		
+		step += controls.bouncingSpeed;
+		sphere.position.x = 20 + ( 10 * Math.cos(step) );
+		sphere.position.y = 2  + ( 10 * Math.abs(Math.sin(step)) );
+		
+		requestAnimationFrame(render);
+		renderer.render(scene,camera);
+	}
+
+
+	function initStats(){
+		var stats = new Stats();
+			stats.setMode(0); //0:fps,1:ms
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.left = '0px';
+			stats.domElement.style.top = '0px';
+			
+		$('#stats').append(stats.domElement);
+		
+		return stats;
+	}
+}
+
+
+
+</script>
+	
+</head>
+
+<body onload='initThreeJS()'>
+
+	<div id='stats'></div>
+	<div id='ThreeJS'></div>
+	
+
+</body>
+</html>

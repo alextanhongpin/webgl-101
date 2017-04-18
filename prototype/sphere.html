@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8'>
+    <title>3d-movements</title>
+</head>
+
+<style>
+    *{
+        margin: 0;
+        padding: 0;
+    }
+    
+    canvas{
+        display: block;
+    }
+	
+	h1 {
+		z-index: 100;
+		position: absolute;
+		font-family: Arial;
+		color: #09f;
+		opacity: 0.8;
+		top: 100px;
+		left: 100px;
+	}
+</style>
+    
+<body>
+	<h1>Hello World.</h1>
+    <canvas id='canvas'>This browser does not support the Canvas API.</canvas>
+
+	<script src='js/raf_polyfill.js'></script>
+	<script src="js/gl-matrix-min.js"></script>
+	<script src="js/webgl-light.js"></script>
+    
+	<script id='vertex-shader' type='x-shader/x-vertex'>
+        attribute vec3 aVertexPosition;
+
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+        void main(void){
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        }
+    </script>
+    
+    <script id='fragment-shader' type='x-shader/x-fragment'>
+        void main(void){
+            gl_FragColor = vec4(0.0, 0.5, 1.0, 0.5);
+        }
+    </script>
+		
+	<script>
+
+	'use strict';
+
+
+	var latitudeBands = 30;
+	var longitudeBands = 30;
+	var radius = 2;
+	
+	var sphere_vertices = [];
+	var sphere_indices = [];
+
+
+
+	for (var i = 0; i <= latitudeBands; i += 1) {
+		var theta = i * Math.PI / latitudeBands;
+		for (var j = 0; j <= longitudeBands; j += 1) {
+		var phi = j * 2 * Math.PI / longitudeBands;
+
+		var x = Math.cos(phi) * Math.sin(theta);
+		var y = Math.cos(theta);
+		var z = Math.sin(phi) * Math.sin(theta);
+
+		sphere_vertices.push(radius * x);
+		sphere_vertices.push(radius * y);
+		sphere_vertices.push(radius * z);
+		}
+	}
+	
+		var sphere_indices = [];
+		    for (var i = 0; i < latitudeBands; i += 1) {
+		      for (var j = 0; j < longitudeBands; j += 1) {
+		        var first = (i * (longitudeBands + 1)) + j;
+		        var second = first + longitudeBands + 1;
+		        sphere_indices.push(first);
+		        sphere_indices.push(second);
+		        sphere_indices.push(first + 1);
+
+		        sphere_indices.push(second);
+		        sphere_indices.push(second + 1);
+		        sphere_indices.push(first + 1);
+				
+		      }
+		    }
+			
+		
+		
+	function init () {
+    	if (GL.hasWebGL('canvas')) {
+    		GL.initShaders();
+			GL.bindEvents();
+			GL.vertex = new GL.buffer({
+				'vertices': sphere_vertices,
+				'attribute': 'aVertexPosition'
+			});
+			GL.vertex.setupBuffer();
+			GL.getMatrixUniform();
+			GL.indexBuffer(sphere_indices);
+			(function loop () {
+				GL.clear({
+					'r': 0.1,
+					'g': 0.1,
+					'b': 0.1,
+					'a': 1.0
+				});
+				GL.setModelView({
+					'translate': [0.0, 0.0, -5.0],
+					'rotate': [0.5, 0.5, 1.0]
+				});
+
+				GL.setProjectionView();	
+				GL.vertex.setAttribute();
+				GL.setMatrixUniform();
+				GL.drawElements();
+				requestAnimationFrame(loop);
+			})();
+    	} else {
+    		alert('Does not support WebGL');
+    	}
+    }
+	
+	init();
+
+    </script>
+</body>
+    
+
+</html>

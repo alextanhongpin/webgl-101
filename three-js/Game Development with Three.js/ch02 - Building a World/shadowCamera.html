@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="three.min.js"></script>
+    <script>
+
+      // GLOBALS =====================================================
+
+      var camera, scene, renderer;
+      var geometry, material, mesh;
+
+      // SETUP =======================================================
+
+      function setup() {
+        setupThreeJS();
+        setupWorld();
+
+        requestAnimationFrame(function animate() {
+          draw();
+          update();
+          requestAnimationFrame( animate );
+        });
+      }
+
+      function setupThreeJS() {
+        document.body.style.backgroundColor = '#D3DCDF';
+        scene = new THREE.Scene();
+
+        camera = new THREE.PerspectiveCamera( 65, window.innerWidth / window.innerHeight, 0.1, 10000 );
+        function d2r(d) { return d * Math.PI / 180; }
+        camera.position.set(1500, 1000, 1000);
+        camera.rotation.set(d2r(-45), d2r(45), d2r(0));
+
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        renderer.shadowMapEnabled = true;
+        document.body.appendChild( renderer.domElement );
+      }
+
+      function setupWorld() {
+        var geo = new THREE.PlaneGeometry(1200, 800, 12, 8);
+        var mat = new THREE.MeshPhongMaterial({color: 0x9db3b5});
+        var floor = new THREE.Mesh(geo, mat);
+        floor.rotation.x = -0.5 * Math.PI;
+        floor.position.y = -200;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        geometry = new THREE.IcosahedronGeometry( 200, 2 );
+        material = new THREE.MeshPhongMaterial({color: 0x9db3b5, shading: THREE.FlatShading});
+
+        mesh = new THREE.Mesh( geometry, material );
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.position.set(100, 0, -100);
+        scene.add( mesh );
+
+        var light = new THREE.DirectionalLight(0xf9f1c2, 1);
+        light.castShadow = true;
+        light.shadowMapWidth = 1024;
+        light.shadowMapHeight = 1024;
+        light.shadowCameraVisible = true;
+        light.position.set(900, 450, -450);
+        light.shadowCameraNear = 600;
+        light.shadowCameraFar = 3000;
+        var d = 400;
+        light.shadowCameraLeft = -d;
+        light.shadowCameraRight = d;
+        light.shadowCameraTop = d;
+        light.shadowCameraBottom = -d;
+        scene.add(light);
+      }
+
+      // DRAW ========================================================
+
+      function draw() {
+        renderer.render( scene, camera );
+      }
+
+      // UPDATE ======================================================
+
+      function update() {
+      }
+
+      // RUN =========================================================
+
+      setup();
+
+    </script>
+  </body>
+</html>

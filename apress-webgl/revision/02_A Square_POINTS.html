@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>A Square</title>
+
+<style>
+
+body{background-color: #dddddd;}
+canvas{
+position: fixed;
+background-color: #ffffff;
+top: 50%; left: 50%;
+margin-top: -150px; margin-left: -200px;
+}
+
+</style>
+
+
+
+
+
+<script id='shader-vs' type='x-shader/x-vertex'>
+	attribute vec3 aVertexPosition;
+	void main(void){
+		gl_Position = vec4(aVertexPosition, 1.0);
+		gl_PointSize = 5.0;
+	}
+</script>
+
+
+
+
+
+<script id='shader-fs' type='x-shader/x-fragment'>
+	void main(void){
+		gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+	}
+</script>
+
+
+
+
+<script>
+
+	var gl = null,
+		canvas = null,
+		fragmentShader = null,
+		vertexShader = null,
+		glProgram = null;
+		
+	var vertexPositionAttribute = null,
+		squareVerticeBuffer = null;
+
+		
+		
+		
+	function initWebGL(){
+		canvas = document.getElementById('canvas');
+		try{
+			gl = canvas.getContext('webgl')||canvas.getContext('experimental-webgl');
+		}catch(e){}
+	
+		if(gl){
+			setupWebGL();
+			initShaders();
+			setupBuffers();
+			drawScene();
+		}else{
+			alert('Error: Your browser does not appear to support WebGL.');
+		}
+	}
+		
+		
+	
+	
+	function setupWebGL(){
+		//set the clear color to a shade of red
+		gl.clearColor(1.0, 0.0, 0.0, 1.0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+	}
+	
+	
+	
+	
+	function initShaders(){
+		//get shader source
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+		
+		//compile shaders
+		vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		
+		//create program
+		glProgram = gl.createProgram();
+		
+		//attach and link shaders to the program
+		gl.attachShader(glProgram, vertexShader);
+		gl.attachShader(glProgram, fragmentShader);
+		gl.linkProgram(glProgram);
+		
+		if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+			alert('Unable to initialize the shader program.');
+		}
+		//use program
+		gl.useProgram(glProgram);
+	}
+	
+	
+	
+	
+	function makeShader(src, type){
+		//compile the vertex shader
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+			alert('Error compiling shader: '+ gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	
+	
+	
+	function setupBuffers(){
+		var squareVertices = [
+			-0.5, 0.5, 0.0,
+			0.5, 0.5, 0.0,
+			-0.5, -0.5, 0.0,
+			0.5, -0.5, 0.0
+		];
+		
+		squareVerticeBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticeBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(squareVertices), gl.STATIC_DRAW);
+	}
+	
+	
+	
+	
+	function drawScene(){
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticeBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+		gl.drawArrays(gl.POINTS, 0, 4);
+	}
+</script>
+
+
+
+
+</head>
+
+<body onload='initWebGL()'>
+
+
+<canvas id='canvas' width='400' height='300'></canvas>
+
+</body>
+</html>

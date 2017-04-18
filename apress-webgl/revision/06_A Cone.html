@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>A Cone</title>
+
+<style>
+
+body{
+	background-color: #dddddd;
+}
+
+canvas{
+	position: fixed;
+	background-color: #ffffff;
+	top: 50%; left: 50%;
+	margin-top: -150px; margin-left: -200px;
+}
+
+</style>
+
+
+
+
+<script src='raf_polyfill.js'></script>
+
+
+
+
+<script src='gl-matrix-min.js'></script>
+
+
+
+
+<script id='shader-vs' type='x-shader/x-vertex'>
+	attribute vec3 aVertexPosition;
+	attribute vec3 aVertexColor;
+	
+	uniform mat4 uMVMatrix;
+	uniform mat4 uPMatrix;
+	
+	varying highp vec4 vColor;
+	void main(void){
+		gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		vColor = vec4(aVertexColor, 1.0);
+		gl_PointSize = 5.0;
+	}
+</script>
+
+
+
+
+
+<script id='shader-fs' type='x-shader/x-fragment'>
+	varying highp vec4 vColor;
+	void main(void){
+		gl_FragColor = vColor;
+	}
+</script>
+
+
+
+
+<script>
+
+	var gl = null,
+		canvas = null,
+		fragmentShader = null,
+		vertexShader = null,
+		glProgram = null;
+		
+	var vertexPositionAttribute = null,
+		conesVerticeBuffer = null,
+		coneIndexBuffer = null,
+		
+		vertexColorAttribute = null,
+		coneVerticesColorBuffer = null;
+
+	var mvMatrix = mat4.create(), //model-view matrix
+		 pMatrix = mat4.create(); //projection matrix
+	
+	var angle = 0.0;
+		
+		
+	function initWebGL(){
+		canvas = document.getElementById('canvas');
+		try{
+			gl = canvas.getContext('webgl',{antialias: true})||canvas.getContext('experimental-webgl');
+		}catch(e){}
+	
+		if(gl){
+			initShaders();
+			setupBuffers();
+			getMatrixUniforms();
+			(function animLoop(){
+				setupWebGL();
+				setMatrixUniforms();
+				drawScene();
+				requestAnimationFrame(animLoop, canvas);
+			})();
+		}else{
+			alert('Error: Your browser does not appear to support WebGL.');
+		}
+	}
+		
+		
+	
+	
+	function setupWebGL(){
+		//set the clear color to a shade of red
+		gl.clearColor(1.0, 1.0, 1.0, 1.0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+		
+		//perfect cone can only be achieved if the height/width ratio is the same
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		mat4.perspective(45, canvas.width/canvas.height, 0.1, 100.0, pMatrix);
+		mat4.identity(mvMatrix);
+		mat4.translate(mvMatrix, [0.0, 0.0, -2.0]);
+		mat4.rotate(mvMatrix, angle, [1.0, 1.0, 0.0]);
+		
+		angle += 0.01;
+	}
+	
+	
+	
+	
+	function initShaders(){
+		//get shader source
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+		
+		//compile shaders
+		vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		
+		//create program
+		glProgram = gl.createProgram();
+		
+		//attach and link shaders to the program
+		gl.attachShader(glProgram, vertexShader);
+		gl.attachShader(glProgram, fragmentShader);
+		gl.linkProgram(glProgram);
+		
+		if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+			alert('Unable to initialize the shader program.');
+		}
+		//use program
+		gl.useProgram(glProgram);
+	}
+	
+	
+	
+	
+	function makeShader(src, type){
+		//compile the vertex shader
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+			alert('Error compiling shader: '+ gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	
+	
+	
+	function setupBuffers(){
+	
+		coneVertices = [0.0, 0.0, 0.5];
+		for (var i=0; i<12; i++){		
+			coneVertices.push(Math.cos(i * 30 * Math.PI/180) / 2.0);
+			coneVertices.push(Math.sin(i * 30 * Math.PI/180) / 2.0);
+			coneVertices.push(0.0);
+		}
+		conesVerticeBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, conesVerticeBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coneVertices), gl.STATIC_DRAW);
+	
+		coneVerticesColor = [];
+		for (var i = 0; i<36; i++){
+			coneVerticesColor.push(1.0, 0.0, 0.0);
+		}
+		
+		coneVerticesColorBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, coneVerticesColorBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coneVerticesColor), gl.STATIC_DRAW);
+
+		coneIndices = [];
+		for (var i = 0; i<11; i++){
+			coneIndices.push(0);
+			coneIndices.push(i+1);
+			coneIndices.push(i+2);
+			if(i>9){
+				coneIndices.push(0,12,1);
+			}
+		}
+		
+		coneIndexBuffer = gl.createBuffer();
+		coneIndexBuffer.num = coneIndices.length;
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, coneIndexBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(coneIndices), gl.STATIC_DRAW);
+		
+		
+	}
+
+	
+	
+	
+	function drawScene(){
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, conesVerticeBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		vertexColorAttribute = gl.getAttribLocation(glProgram, 'aVertexColor');
+		gl.enableVertexAttribArray(vertexColorAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, coneVerticesColorBuffer);
+		gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		gl.drawElements(gl.TRIANGLES, coneIndexBuffer.num , gl.UNSIGNED_SHORT, 0);
+	}
+	
+	
+	
+	
+	function getMatrixUniforms(){
+		glProgram.pMatrixUniform  = gl.getUniformLocation(glProgram, "uPMatrix");
+		glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, "uMVMatrix");
+	}
+	
+	
+	
+	
+	function setMatrixUniforms() {
+		gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+		gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+	}
+</script>
+
+
+
+
+</head>
+
+<body onload='initWebGL()'>
+
+
+<canvas id='canvas' width='400' height='300'></canvas>
+
+</body>
+</html>

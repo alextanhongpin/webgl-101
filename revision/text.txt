@@ -1,0 +1,1 @@
+Create an app that is not persistent. Data can be transferred anywhere nearby through wireless transmitters.

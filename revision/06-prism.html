@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-type" content="text/html; charset=utf-8">
+		<title>01-webgl-context</title>
+		<style type="text/css" media="screen">
+			
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		
+		canvas {
+			display: block;
+		}
+		
+		</style>
+	</head>
+	<body onload="initWebGL();">
+		<canvas id='canvas'>This browser does not have support for Canvas API.</canvas>
+		
+		<script src='js/raf_polyfill.js'></script>
+		<script src="js/Utils.js" type="text/javascript" charset="utf-8"></script>
+		<script src="js/Program.js" type="text/javascript" charset="utf-8"></script>
+		<script src="js/gl-matrix-min.js"></script>
+		
+		<script type="text/javascript">
+			
+		'use strict';
+		
+		let gl = null;
+		let program = null;
+		
+		var utils = new Utils();
+		var progUtils = new Program();
+		
+		
+		let attributeList = ['aVertexPosition', 'aVertexColor'];
+		let attribute = [];
+		let uniformList = ['uPMatrix', 'uMVMatrix'];
+		let uniform = [];
+		let matrix = [];
+		let buffer = [];
+		let angle = 0;
+		
+		matrix['uPMatrix'] = mat4.create();
+		matrix['uMVMatrix'] = mat4.create();
+		
+		let vs_source = `
+	    attribute vec3 aVertexPosition;
+	    attribute vec3 aVertexColor;
+  
+			uniform mat4 uMVMatrix;
+			uniform mat4 uPMatrix;
+			
+	    varying highp vec4 vColor;
+	    void main (void) {
+	        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+	        vColor = vec4( aVertexColor, 1.0);
+	    }`;
+		
+		let fs_source = `
+	    varying highp vec4 vColor;
+	    void main (void) {
+	        gl_FragColor = vColor;
+	    }`;
+		
+		
+		function initWebGL () {
+			
+			gl = utils.getGLContext('canvas');
+			
+			progUtils.setContext(gl);
+			progUtils.initShaders(vs_source, fs_source);
+			// attributes must be loaded after program has been loaded
+			utils.loadAttributes(attributeList);
+			utils.getUniforms(uniformList);
+			
+			setupBuffers();
+				(function loop () {
+					
+					setupWebGL();
+					utils.setUniforms(uniformList);
+					drawScene();
+					requestAnimationFrame(loop, canvas);
+				})();
+		}
+		
+		function setupWebGL () {
+			gl.clearColor(.8, .8, .8, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			gl.viewport(0, 0, canvas.width, canvas.height);
+			
+			// setup perspective
+			mat4.perspective(45, canvas.width / canvas.height, .1, 100.0, matrix['uPMatrix']);
+			// setup mv
+			mat4.identity(matrix['uMVMatrix']);
+			mat4.translate(matrix['uMVMatrix'], [-1.0, -1.0, -7.0]);
+			mat4.rotate(matrix['uMVMatrix'], angle, [.0, 1.0, .0]);
+			angle += .01;
+		}
+		
+		
+		
+		function setupBuffers () {
+			
+			let verticesColor = [
+        // front face 
+        0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0,
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0,
+        
+        // rear face
+        0.0, 1.0, 1.0,
+        1.0, 1.0, 1.0,
+        0.0, 1.0, 1.0,
+        0.0, 1.0, 1.0,
+        0.0, 1.0, 1.0,
+        1.0, 1.0, 1.0,
+			];
+			buffer['color'] = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffer['color']);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesColor), gl.STATIC_DRAW);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+			
+			let vertices = [
+        // front face
+        // bottom left to right, to top
+        0.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+        2.0, 0.0, 0.0,
+        0.5, 1.0, 0.0,
+        1.5, 1.0, 0.0,
+        1.0, 2.0, 0.0,
+        
+        // rear face
+        0.0, 0.0, -2.0,
+        1.0, 0.0, -2.0,
+        2.0, 0.0, -2.0,
+        0.5, 1.0, -2.0,
+        1.5, 1.0, -2.0,
+        1.0, 2.0, -2.0
+			];
+			
+			buffer['vertex'] = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffer['vertex']);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+			
+			let indices = [
+        // front face
+        0, 1, 3,
+        1, 3, 4,
+        1, 2, 4,
+        3, 4, 5,
+        // rear face
+        6, 7, 9,
+        7, 9, 10,
+        7, 8, 10,
+        9, 10, 11,
+        // left side
+        0, 3, 6,
+        3, 6, 9,
+        3, 5, 9,
+        5, 9, 11,
+        //right side
+        2, 4, 8,
+        4, 8, 10,
+        4, 5, 10,
+        5, 10, 11,
+        // bottom face
+        0, 6, 8,
+        8, 2, 0
+			];
+			
+			buffer['indices'] = gl.createBuffer();
+			buffer['indices.length'] = indices.length;
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer['indices']);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+		}
+		
+
+		
+		function drawScene () {
+			
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffer['vertex']);
+			gl.vertexAttribPointer(attribute['aVertexPosition'], 3, gl.FLOAT, false, 0, 0);
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffer['color']);
+			gl.vertexAttribPointer(attribute['aVertexColor'], 3, gl.FLOAT, false, 0, 0);
+			
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer['indices']);
+			
+			gl.drawElements(gl.TRIANGLES, buffer['indices.length'], gl.UNSIGNED_SHORT, 0);
+			
+		}
+		
+		
+		
+		</script>
+	</body>
+</html>

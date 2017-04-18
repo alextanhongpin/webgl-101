@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>A Sphere</title>
+
+<style>
+
+* {
+	margin: 0;
+	padding: 0;
+}
+	
+
+body{
+	background-color: #dddddd;
+}
+
+canvas{
+	display: block;
+	background-color: #ffffff;
+}
+
+</style>
+
+
+
+
+<script src='raf_polyfill.js'></script>
+
+
+
+
+<script src='gl-matrix-min.js'></script>
+
+
+
+
+<script src='utils.js'></script>
+
+
+
+
+<script id='shader-vs' type='x-shader/x-vertex'>
+	attribute vec3 aVertexPosition;
+	attribute vec3 aVertexColor;
+	attribute vec3 aVertexNormal;
+	
+	uniform mat3 uNormalMatrix;
+	uniform mat4 uMVMatrix;
+	uniform mat4 uPMatrix;
+	
+	varying highp vec4 vColor;
+	varying highp vec3 vLight;
+	void main(void){
+		gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		vColor = vec4(aVertexColor, 1.0);
+		gl_PointSize = 5.0;
+		
+		//lighting
+		vec3 ambientLight = vec3(0.2, 0.2, 0.2);
+		vec3 directionalLightColor = vec3(0.8, 0.8, 0.8);
+		vec3 directionalLightPosition = normalize( vec3(1.0, 0.5, 1.0) );
+		
+		vec3 transformedNormal = uNormalMatrix * aVertexNormal;
+		float diffuseLightAmount = max( dot(transformedNormal, directionalLightPosition), 0.0 );
+		vLight = ambientLight + (diffuseLightAmount * directionalLightColor);
+	}
+</script>
+
+
+
+
+
+<script id='shader-fs' type='x-shader/x-fragment'>
+	varying highp vec4 vColor;
+	varying highp vec3 vLight;
+	void main(void){
+		gl_FragColor = vec4(vColor.xyz * vLight, vColor.a);
+	}
+</script>
+
+
+
+
+<script>
+
+	var gl = null,
+		canvas = null,
+		fragmentShader = null,
+		vertexShader = null,
+		glProgram = null;
+		
+	var vertexPositionAttribute = null,
+		vertexColorAttribute = null,
+		vertexNormalAttribute = null,
+		
+		spheresVerticeBuffer = null,
+		sphereIndexBuffer = null,
+		sphereNormalBuffer = null,
+		sphereVerticesColorBuffer = null;
+
+	var mvMatrix     = mat4.create(), //model-view matrix
+		pMatrix      = mat4.create(); //projection matrix
+		normalMatrix = mat3.create(); //normalMatrix
+		
+	var angle = 0.0;
+		
+		
+	function initWebGL(){
+		canvas = document.getElementById('canvas');
+		canvas.width = window.innerWidth;
+		canvas.height = window.innerHeight;
+		try{
+			gl = canvas.getContext('webgl',{antialias: true})||canvas.getContext('experimental-webgl');
+		}catch(e){}
+	
+		if(gl){
+			initShaders();
+			setupBuffers();
+			getMatrixUniforms();
+			(function animLoop(){
+				setupWebGL();
+				setMatrixUniforms();
+				drawScene();
+				requestAnimationFrame(animLoop, canvas);
+			})();
+		}else{
+			alert('Error: Your browser does not appear to support WebGL.');
+		}
+	}
+		
+		
+	
+	
+	function setupWebGL(){
+		gl.clearColor(0.2, 0.2, 0.2, 1.0);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		gl.enable(gl.DEPTH_TEST);
+
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		mat4.perspective(45, canvas.width/canvas.height, 0.1, 100.0, pMatrix);
+		mat4.identity(mvMatrix);
+		mat4.translate(mvMatrix, [0.0, 0.0, -10.0]);
+		mat4.rotate(mvMatrix, angle, [0.0, 1.0, 0.0]);
+		
+		angle += 0.01;
+		
+		mat4.toInverseMat3(mvMatrix, normalMatrix);
+		mat3.transpose(normalMatrix);
+	}
+	
+	
+	
+	
+	function initShaders(){
+		//get shader source
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+		
+		//compile shaders
+		vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		
+		//create program
+		glProgram = gl.createProgram();
+		
+		//attach and link shaders to the program
+		gl.attachShader(glProgram, vertexShader);
+		gl.attachShader(glProgram, fragmentShader);
+		gl.linkProgram(glProgram);
+		
+		if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+			alert('Unable to initialize the shader program.');
+		}
+		//use program
+		gl.useProgram(glProgram);
+	}
+	
+	
+	
+	
+	function makeShader(src, type){
+		//compile the vertex shader
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+			alert('Error compiling shader: '+ gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	
+	var longitude = 30;
+	var latitude = 30;
+	var radius = 2;
+	
+	function setupBuffers(){
+	
+		var sphereVertices = [],
+			sphereVerticesColor = [],
+			sphereIndices = [],
+			sphereNormal = [];
+		
+		
+		for (var i=0; i<=latitude; i++){		
+			var sintheta = Math.sin(i * 2 * Math.PI / latitude);
+			var costheta = Math.cos(i * 2 * Math.PI / latitude);
+			
+			for (var j=0; j<=longitude; j++){
+				var sinphi = Math.sin(j * 2 * Math.PI / longitude);
+				var cosphi = Math.cos(j * 2 * Math.PI / longitude);
+				
+				var x = sintheta * cosphi;  
+				var y = costheta;
+				var z = sintheta * sinphi;
+				//var u = 1 - (j / longitude); textureCoordData.push(u);
+				//var v = 1 - (i / latitude); textureCoordData.push(v);
+				
+				sphereNormal.push(x);
+				sphereNormal.push(y);
+				sphereNormal.push(z);
+				sphereVerticesColor.push(0.8);
+				sphereVerticesColor.push(0.8);
+				sphereVerticesColor.push(0.8);
+				sphereVertices.push(radius * x);
+				sphereVertices.push(radius * y);
+				sphereVertices.push(radius * z);
+			}
+		}
+		
+		for (var i=0; i<latitude; i++){
+			for (var j=0; j<longitude; j++){
+				var first = (i * (longitude + 1)) + j;
+                var second = first + longitude + 1;
+                sphereIndices.push(first);
+                sphereIndices.push(second);
+                sphereIndices.push(first + 1);
+
+                sphereIndices.push(second);
+                sphereIndices.push(second + 1);
+                sphereIndices.push(first + 1);
+			}
+		}
+		spheresVerticeBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, spheresVerticeBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertices), gl.STATIC_DRAW);
+		
+		sphereVerticesColorBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereVerticesColorBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVerticesColor), gl.STATIC_DRAW);
+	
+		sphereIndexBuffer = gl.createBuffer();
+		sphereIndexBuffer.num = sphereIndices.length;
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(sphereIndices), gl.STATIC_DRAW);
+		
+		//sphereNormal = utils.calculateNormals(sphereVertices, sphereIndices);
+		sphereNormalBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereNormalBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereNormal), gl.STATIC_DRAW);
+		console.log(sphereVertices.length);
+		console.log(sphereIndices.length)
+	}
+
+	
+	
+	
+	function drawScene(){
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, spheresVerticeBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		vertexColorAttribute = gl.getAttribLocation(glProgram, 'aVertexColor');
+		gl.enableVertexAttribArray(vertexColorAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereVerticesColorBuffer);
+		gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		vertexNormalAttribute = gl.getAttribLocation(glProgram, 'aVertexNormal');
+		gl.enableVertexAttribArray(vertexNormalAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereNormalBuffer);
+		gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		gl.drawElements(gl.TRIANGLES, sphereIndexBuffer.num , gl.UNSIGNED_SHORT, 0);
+	}
+	
+	
+	
+	
+	function getMatrixUniforms(){
+		glProgram.pMatrixUniform      = gl.getUniformLocation(glProgram, "uPMatrix");
+		glProgram.mvMatrixUniform     = gl.getUniformLocation(glProgram, "uMVMatrix");
+		glProgram.normalMatrixUniform = gl.getUniformLocation(glProgram, 'uNormalMatrix');
+	}
+	
+	
+	
+	
+	function setMatrixUniforms() {
+		gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+		gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+		gl.uniformMatrix3fv(glProgram.normalMatrixUniform, false, normalMatrix);
+	}
+</script>
+
+
+
+
+</head>
+
+<body onload='initWebGL()'>
+
+
+<canvas id='canvas' width='400' height='300'></canvas>
+
+</body>
+</html>

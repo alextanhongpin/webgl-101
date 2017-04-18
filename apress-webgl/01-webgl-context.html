@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8'>
+    <title>webgl-context</title>
+</head>
+
+<style>
+    *{
+        margin: 0;
+        padding: 0;
+    }
+    
+    canvas{
+        display: block;
+    }
+</style>
+<body onload='initWebGL()'>
+    <canvas id='canvas'>This browser does not support the Canvas API.</canvas>
+</body>
+    
+    <script>
+        
+        var gl = null;
+        
+        function initWebGL(){
+            var canvas = document.getElementById('canvas');
+                canvas.height = window.innerHeight;
+                canvas.width = window.innerWidth;
+            try{
+                gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            }catch(e){}
+            
+            if(gl){
+                gl.clearColor(1.0, 0.0, 0.0, 1.0);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+            }else{
+                alert('Error: Your browser does not support WebGL');
+            }
+        }
+    
+    </script>
+
+
+
+</html>

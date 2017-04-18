@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>WebGL Context</title>
+
+<style>
+
+	body{
+		margin: 0;
+		padding: 0;
+	}
+	
+	canvas{
+		position: fixed;
+		background-color: #ffffff;
+		top: 50%; left: 50%;
+		margin-top: -300px; margin-left: -400px;
+	}
+
+</style>
+
+<script src='raf_polyfill.js'></script>
+<script src='gl-matrix-min.js'></script>
+
+
+
+
+<script id='shader-vs' type='x-shader/x-vertex'>
+	attribute vec3 aVertexPosition;
+	attribute vec3 aVertexColor;
+	
+	uniform mat4 uMVMatrix;
+	uniform mat4 uPMatrix;
+	
+	varying highp vec4 vColor;
+	void main(void){
+		gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		vColor = vec4(aVertexColor, 1.0);
+	}
+</script>
+
+
+
+
+<script id='shader-fs' type='x-shader/x-fragment'>
+	varying highp vec4 vColor;
+	void main(void){
+		gl_FragColor = vColor;
+	}
+</script>
+
+
+
+
+
+<script>
+	
+	var gl = null,
+		canvas = null,
+		vertexShader = null,
+		fragmentShader = null,
+		glProgram = null;
+	
+	var vertexPositionAttribute = null,
+		vertexColorAttribute = null;
+	
+	var planeVerticesBuffer = null,
+		planeColorBuffer = null;
+		
+	var carVerticesBuffer = null,
+		carColorBuffer = null;
+	
+	var mvMatrix = mat4.create();
+	var pMatrix  = mat4.create();
+	
+	function initWebGL(){
+		canvas = document.getElementById('canvas');
+		try{
+			gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+		}catch(e){}
+		
+		if(gl){
+			setupBuffers();
+			initShaders();
+			getMatrixUniforms();
+			(function animLoop(){
+				setupWebGL();
+				setMatrixUniforms();
+				drawScene();
+				requestAnimationFrame(animLoop, canvas);
+			})();
+		}else{
+			alert('Error: Your browser does not support WebGL.');
+		}
+	}
+	
+	document.onkeydown = function(event){
+		var key = event.keyCode;
+	}
+	
+	function setupWebGL(){
+		gl.clearColor(0.8, 0.8, 0.8, 1.0);
+		gl.enable(gl.DEPTH_TEST);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		
+		mat4.perspective(45, canvas.width/canvas.height, 0.1, 100.0, pMatrix);
+		mat4.identity(mvMatrix);
+		mat4.translate(mvMatrix, [0.0, 0.0, -20.0]);
+		mat4.rotate(mvMatrix, 15, [1,0,0]);
+	}
+	
+	
+	
+	
+	function initShaders(){
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+			
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		vertexShader   = makeShader(vs_source, gl.VERTEX_SHADER);
+		
+		glProgram = gl.createProgram();
+		
+		gl.attachShader(glProgram, vertexShader);
+		gl.attachShader(glProgram, fragmentShader);
+		gl.linkProgram(glProgram);
+		
+		if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+			alert('Unable to initialize the shader program.');
+		}
+		
+		gl.useProgram(glProgram);
+	}
+	
+	
+	
+	
+	function makeShader(src, type){
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+			alert('Error compiling shader' + gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	
+	
+	
+	function setupBuffers(){
+		var planeVertices = [
+			-6.0, -4.0, 0.0,
+			 6.0, -4.0, 0.0,
+			 6.0,  4.0, 0.0,
+			 -6.0,  4.0, 0.0
+		];
+		
+		planeVerticesBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, planeVerticesBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(planeVertices), gl.STATIC_DRAW);
+		
+		var colors = [
+			1.0, 1.0, 1.0, 
+			1.0, 1.0, 1.0,
+			1.0, 1.0, 1.0,
+			1.0, 1.0, 1.0
+		];
+		
+		planeColorBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, planeColorBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+		
+		var carVertices = [
+			0.0, 0.0, -0.5,
+			1.0, 0.0, -0.5,
+			1.0, 1.0, -0.5,
+			0.0, 1.0, -0.5
+		];
+		
+		carVerticesBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, carVerticesBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(carVertices), gl.STATIC_DRAW);
+		
+		var carColors = [
+			0.8, 0.0, 0.0,
+			0.8, 0.0, 0.0,
+			0.8, 0.0, 0.0,
+			0.8, 0.0, 0.0
+		];
+		
+		carColorBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, carColorBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(carColors), gl.STATIC_DRAW);
+	}
+	
+	
+	
+	
+	function drawScene(){
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		verteColorAttribute = gl.getAttribLocation(glProgram, 'aVertexColor');
+		gl.enableVertexAttribArray(vertexColorAttribute);
+		
+		
+		
+		//draw plane
+		gl.bindBuffer(gl.ARRAY_BUFFER, planeVerticesBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, planeColorBuffer);
+		gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+		
+		
+		//draw car
+		gl.bindBuffer(gl.ARRAY_BUFFER, carVerticesBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, carColorBuffer);
+		gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+	}
+
+
+	
+	
+	function getMatrixUniforms(){
+		glProgram.pMatrixUniform  = gl.getUniformLocation(glProgram, 'uPMatrix');
+		glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, 'uMVMatrix');
+	}
+	
+	
+	
+	
+	function setMatrixUniforms(){
+		gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+		gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+	}
+</script>
+</head>
+
+<body onload='initWebGL()'>
+
+	<canvas id='canvas' width='800' height='600'>
+
+	</canvas>
+
+</body>
+</html>

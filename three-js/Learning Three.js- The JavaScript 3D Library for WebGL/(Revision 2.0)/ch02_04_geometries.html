@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+	<title>geometries</title>
+	
+	<script src='three.min.js'></script>
+	<script src='stats.js'></script>
+	<script src='dat.gui.js'></script>
+	<script src='ConvexGeometry.js'></script>
+	<script src='ParametricGeometries.js'></script>
+	<script src='http://code.jquery.com/jquery-2.1.0.min.js'></script>
+	
+	<style>
+		body{
+			margin: 0;
+			padding: 0;
+		}
+	</style>
+</head>
+
+
+<script>$(document).ready(function(){
+
+	var stats = initStats();
+	var scene = new THREE.Scene();
+	var camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight,0.1,1000);
+	var renderer = new THREE.WebGLRenderer();
+		renderer.setClearColor(0xeeeeee,1.0);
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		renderer.shadowMapEnabled = true;
+	
+	var planeGeometry = new THREE.PlaneGeometry(60,40,1,1);
+	var planeMaterial = new THREE.MeshLambertMaterial({ color: 0xfffffff });
+	var plane = new THREE.Mesh(planeGeometry, planeMaterial);
+		plane.receiveShadow = true;
+		plane.rotation.x = -0.5 * Math.PI;
+		plane.position.set(0,0,0);
+	scene.add(plane);
+	
+	camera.position.set(-50,30,20);
+	camera.lookAt(new THREE.Vector3(-10,0,0));
+	
+	var ambientLight = new THREE.AmbientLight(0x090909);
+	scene.add(ambientLight);
+	
+	var spotLight = new THREE.SpotLight( 0xffffff );
+		spotLight.position.set(-40,40,50);
+		spotLight.castShadow = true;
+	scene.add(spotLight);
+	
+	addGeometries(scene);
+	
+	$('#ThreeJS').append(renderer.domElement);
+	
+	var step = 0;
+	
+	render();
+	
+	function addGeometries(scene){
+		var geoms = [];
+			geoms.push(new THREE.CylinderGeometry(1,4,4));
+			geoms.push(new THREE.CubeGeometry(2,2,2));
+			geoms.push(new THREE.SphereGeometry(2));
+			geoms.push(new THREE.IcosahedronGeometry(4));
+			
+			var points = [
+				new THREE.Vector3(2,2,2),
+				new THREE.Vector3(2,2,-2),
+				new THREE.Vector3(-2,2,-2),
+				new THREE.Vector3(-2,2,2),
+				new THREE.Vector3(2,-2,2),
+				new THREE.Vector3(2,-2,-2),
+				new THREE.Vector3(-2,-2,-2),
+				new THREE.Vector3(-2,-2,2)
+			];
+			geoms.push(new THREE.ConvexGeometry(points));
+			
+			var pts = [];
+			var detail = 0.1;
+			var radius = 3;
+			for (var angle = 0.0; angle < Math.PI; angle+=detail){
+				pts.push( new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
+			}
+			geoms.push(new THREE.LatheGeometry(pts,12));
+			geoms.push(new THREE.OctahedronGeometry(3));
+			geoms.push(new THREE.ParametricGeometry(THREE.ParametricGeometries.mobius3d,20,10));
+			geoms.push(new THREE.TetrahedronGeometry(3));
+			geoms.push(new THREE.TorusGeometry(3,1,10,10));
+			geoms.push(new THREE.TorusKnotGeometry(3,0.5,50,20));
+			
+			var j = 0;
+			for (var i=0; i < geoms.length; i++){
+				var cubeMaterial  = new THREE.MeshLambertMaterial({ wireframe:true, color: Math.random()* 0xffffff });
+				var materials = [
+					new  THREE.MeshLambertMaterial({color: Math.random()*0xffffff, shading: THREE.FlatShading}),
+					new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true })
+				];
+				var mesh = THREE.SceneUtils.createMultiMaterialObject(geoms[i], materials);
+					mesh.traverse(function(e){e.castShadow = true});
+					mesh.position.x = -24 + ((i%4)*12);
+					mesh.position.y = 4;
+					mesh.position.z = -8 + (j*12);
+					
+					if((i+1)%4==0)j++;
+					scene.add(mesh);
+			}
+			
+			
+			
+	}
+	
+	
+	function render(){
+		stats.update();
+		requestAnimationFrame(render);
+		renderer.render(scene, camera);
+	}
+	
+	function initStats(){
+		var stats = new Stats();
+			stats.setMode(0);
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.left = '0px';
+			stats.domElement.style.top = '0px';
+			
+			$('#stats').append(stats.domElement);
+			return stats;
+			
+	}
+	
+	
+
+});</script>
+
+<body>
+	<div id='stats'></div>
+	<div id='ThreeJS'></div>
+</body>
+</html>

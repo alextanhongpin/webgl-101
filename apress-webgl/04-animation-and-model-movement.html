@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8'>
+    <title>2d-movements</title>
+</head>
+
+<style>
+    *{
+        margin: 0;
+        padding: 0;
+    }
+    
+    canvas{
+        display: block;
+    }
+</style>
+   
+<body onload='initWebGL()'>
+    <canvas id='canvas'>Sorry your browser does not support Canvas API.</canvas>
+    <script src='js/raf_polyfill.js'></script>
+
+    <script type='x-shader/x-vertex' id='shader-vs'>
+        attribute vec3 aVertexPosition;
+        attribute vec3 aVertexColor;
+        
+        varying highp vec4 vColor;
+        void main (void) {
+            gl_Position = vec4(aVertexPosition, 1.0);
+            vColor = vec4( aVertexColor, 1.0);
+        }
+    </script>
+    
+    <script type='x-shader/x-fragment' id='shader-fs'>
+        varying highp vec4 vColor;
+        void main (void) {
+            gl_FragColor = vColor;
+        }
+    
+    </script>
+    
+    <script>
+    
+    var gl = null,
+        canvas = null,
+        glProgram = null,
+        fragmentShader = null,
+        vertexShader = null;
+    
+    var vertexPositionAttribute = null,
+        trianglesVerticesBuffer = null,
+        vertexColorAttribute = null,
+        trianglesColorBuffer = null;
+    
+    var angle = 0.0;
+        
+    function initWebGL () {
+        canvas = document.getElementById('canvas');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        try {
+            gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        } catch (e) {}
+        
+        
+        if (gl) {
+            initShaders();
+            setupBuffers();
+            (function animLoop() {
+                setupWebGL();
+                setupDynamicBuffers();
+                drawScene();
+                requestAnimationFrame(animLoop, canvas);
+            })();
+        } else {
+            alert('Error: Your browser does not support WebGL.');
+        }
+    }
+    
+    function setupWebGL () {
+        // set the color to the shade of green
+        gl.clearColor(0.1, 0.5, 0.1, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        
+        gl.viewport(0, 0, canvas.width, canvas.height);
+    } 
+        
+    function initShaders () {
+        // get shader source
+        var fs_source = document.getElementById('shader-fs').innerHTML,
+            vs_source = document.getElementById('shader-vs').innerHTML;
+        
+        //compile shaders
+        fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+        vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+        
+        // create program
+        glProgram = gl.createProgram();
+        
+        // attach and link shaders to program
+        gl.attachShader(glProgram, vertexShader);
+        gl.attachShader(glProgram, fragmentShader);
+        gl.linkProgram(glProgram);
+        
+        if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+            alert('Unable to initialize the shader program');
+        }
+        
+        // use program
+        gl.useProgram(glProgram);
+    }
+        
+    function makeShader (src, type) {
+        // compile the vertex shader
+        var shader = gl.createShader(type);
+        
+        gl.shaderSource(shader, src);
+        gl.compileShader(shader);
+        
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert('Error compiling shader: ' + gl.getShaderLogInfo(shader));
+        }
+        return shader;
+    } 
+        
+        
+        
+    function setupBuffers () {
+        
+        var triangleVerticesColors = [
+            // red left triangle
+            1.0, 0.0, 0.0,
+            1.0, 1.0, 1.0,
+            1.0, 0.0, 0.0,
+            // blue right triangle
+            0.0, 0.0, 1.0,
+            1.0, 1.0, 1.0,
+            0.0, 0.0, 1.0
+        ];
+        
+        trianglesColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, trianglesColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangleVerticesColors), gl.STATIC_DRAW);
+        
+    }
+        
+    function setupDynamicBuffers () {
+        
+        var x = Math.sin(angle) / 2.0;
+        
+        var triangleVertices = [
+            // left triangle
+            -0.5 + x, 0.5, 0.0,
+            0.0 + x, 0.0, 0.0,
+            -0.5 + x, -0.5, 0.0,
+            // right triangle
+            0.5 + x, 0.5, 0.0,
+            0.0 + x, 0.0, 0.0,
+            0.5 + x, -0.5, 0.0
+        ];
+        
+        angle += 0.01;
+        
+        trianglesVerticesBuffer = gl.createBuffer();
+        // why not just write gl.createBuffer directly?
+        gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticesBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangleVertices), gl.DYNAMIC_DRAW);
+        
+    }
+    
+    function drawScene () {
+        vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+        gl.enableVertexAttribArray(vertexPositionAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticesBuffer);
+        gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+        
+        vertexColorAttribute = gl.getAttribLocation(glProgram, 'aVertexColor');
+        gl.enableVertexAttribArray(vertexColorAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, trianglesColorBuffer);
+        gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+        
+    </script>
+</body>    
+</html>

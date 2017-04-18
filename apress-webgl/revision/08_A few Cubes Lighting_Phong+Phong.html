@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Ambient and Directional Lighting</title>
+
+<style>
+
+body{background-color: #dddddd;}
+
+	canvas{
+		position: fixed;
+		background-color: #ffffff;
+		top: 50%; left: 50%;
+		margin-top: -200px; margin-left: -300px;
+	}
+
+</style>
+
+<script src='raf_polyfill.js'></script>
+
+
+
+
+<script src='gl-matrix-min.js'></script>
+
+
+
+
+<script id='shader-vs' type='x-shader/x-vertex'>
+	attribute vec3 aVertexPosition;
+	attribute vec3 aVertexNormal;
+	
+	uniform mat4 uMVMatrix;
+	uniform mat4 uPMatrix;
+	uniform mat4 uNormalMatrix;
+
+	varying vec3 vEyeVec;
+	varying vec3 vNormal;
+	void main(void){
+		vec4 vertex = uMVMatrix * vec4(aVertexPosition, 1.0);	  	//transformed vertex position
+		vNormal = vec3(uNormalMatrix * vec4(aVertexNormal, 1.0));	//transformed normal position
+		vEyeVec = -vec3(vertex.xyz);								//vector eye
+		gl_Position = uPMatrix * vertex;							//final vertex position
+	}
+</script>
+	
+<script id='shader-fs' type='x-shader/x-1fragment'>
+	#ifdef GL_ES
+	precision highp float;
+	#endif	
+	
+	uniform vec3 uLightDirection;	//incoming light source direction
+	uniform float uShininess;		//shininess*
+	
+	uniform vec4 uLightDiffuse;		//light diffuse component
+	uniform vec4 uLightAmbient;		//light ambient property*
+	uniform vec4 uLightSpecular;	//light specular property*
+	
+	uniform vec4 uMaterialDiffuse;	//material diffuse color
+	uniform vec4 uMaterialAmbient;	//oject ambient property*
+	uniform vec4 uMaterialSpecular; //object specular property*
+	
+	varying vec3 vEyeVec;
+	varying vec3 vNormal;
+	
+	void main(void){
+
+		vec3 N = normalize(vNormal);							
+		vec3 L = normalize(uLightDirection);				     //normalize light to calculate lambertTerm
+		float lambertTerm = dot(N,-L);					 		 //Lambert's cosine Law
+		
+		vec4 Ia = uLightAmbient * uMaterialAmbient;				 //ambient term
+		vec4 Id = vec4(0.0, 0.0, 0.0, 1.0); 					 //diffuse term
+		vec4 Is = vec4(0.0, 0.0, 0.0, 1.0); 					 //specular term
+		
+		
+		if(lambertTerm > 0.0){									 //only if LambertTerm is positive
+			Id = uLightDiffuse * uMaterialDiffuse * lambertTerm; //add diffuse term
+			vec3 E = normalize(vEyeVec);
+			vec3 R = reflect(L, N);
+			float specular = pow( max(dot(R,E), 0.0), uShininess);
+			
+			Is = uLightSpecular * uMaterialSpecular * specular;	 //add specular term
+		}
+		//final vertex color = ambient + diffuse + specular 
+		vec4 finalColor = Ia + Id + Is;
+		finalColor.a = 1.0;
+		gl_FragColor = finalColor;
+	}
+</script>
+
+
+
+
+<script>
+
+	var gl = null,
+		canvas = null,
+		vertexShader = null,
+		fragmentShader = null,
+		glProgram = null;
+		
+	var vertexColorAttribute = null,
+		vertexPositionAttribute = null,
+		vertexNormalAttribute = null,
+		
+		cubeColorBuffer = null,
+		cubeIndexBuffer = null,
+		cubePositionBuffer = null,
+		cubeNormalBuffer = null;
+		
+	var mvMatrix = mat4.create(),
+		pMatrix  = mat4.create(),
+		normalMatrix = mat4.create();
+	
+	var angle = 0.0;
+	
+	function initWebGL(){
+		canvas = document.getElementById('canvas');
+		try{
+			gl = canvas.getContext('experimental-webgl') || canvas.getContext('webgl');
+		}catch(e){}
+		
+		if(gl){
+			initShaders();
+			getMatrixUniforms();
+			setupLights();
+			(function animLoop(){
+				setupWebGL();
+				setMatrixUniforms();
+				
+				setupBuffers(-2,1,1);
+				setupBuffers( 0,1,1);
+				setupBuffers( 2,1,1);
+				
+				setupBuffers( 1,-2,1);
+				setupBuffers( 1, 0,1);
+				setupBuffers( 1, 2,1);
+				
+				setupBuffers( 1,1,-2);
+				setupBuffers( 1,1, 0);
+				setupBuffers( 1,1, 2);
+				
+				requestAnimationFrame(animLoop, canvas);
+			})();
+		}else{
+			alert('Error: Your browser does not appear to support WebGL');
+		}
+	}
+
+	
+	
+	
+	function setupWebGL(){
+		gl.clearColor(0.2, 0.2, 0.2, 1.0);
+		gl.clearDepth(100.0);
+		gl.enable(gl.DEPTH_TEST);
+		gl.depthFunc(gl.LEQUAL);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		mat4.perspective(45, canvas.width/canvas.height, 0.1, 100.0, pMatrix);
+		mat4.identity(mvMatrix);
+		mat4.translate(mvMatrix, [-0.5, -0.5, -10.0]);
+		mat4.rotate(mvMatrix, angle, [0.3, 1.0, 0.5]);
+		
+		angle += 0.01;
+		
+		mat4.toInverseMat3(mvMatrix, normalMatrix);
+		mat3.transpose(normalMatrix);
+	}
+	
+	
+	
+	
+	function initShaders(){
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+			
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		vertexShader   = makeShader(vs_source, gl.VERTEX_SHADER);
+		
+		glProgram = gl.createProgram();
+		
+		gl.attachShader(glProgram, vertexShader);
+		gl.attachShader(glProgram, fragmentShader);
+		gl.linkProgram(glProgram);
+		
+		if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+			alert('Unable to initialize shader program.');
+		}
+		
+		gl.useProgram(glProgram);	
+	}
+	
+	
+	
+	
+	function makeShader(src, type){
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+			alert('Error compiling shader: ' + gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	
+	
+	
+	
+	function setupBuffers(x,y,z){
+	
+		var cubeVertices = [
+			//front face
+			0.0+x, 0.0+y, 0.0+z,
+			1.0+x, 0.0+y, 0.0+z,
+			0.0+x, 1.0+y, 0.0+z,
+			1.0+x, 1.0+y, 0.0+z,
+			//back face
+			0.0+x, 0.0+y, -1.0+z,
+			1.0+x, 0.0+y, -1.0+z,
+			0.0+x, 1.0+y, -1.0+z,
+			1.0+x, 1.0+y, -1.0+z,			
+			//right face
+			1.0+x, 0.0+y, 0.0+z,
+			1.0+x, 0.0+y, -1.0+z,
+			1.0+x, 1.0+y, 0.0+z,
+			1.0+x, 1.0+y, -1.0+z,
+			//left face
+			0.0+x, 0.0+y, 0.0+z,
+			0.0+x, 0.0+y, -1.0+z,
+			0.0+x, 1.0+y, 0.0+z,
+			0.0+x, 1.0+y, -1.0+z,
+			//top face
+			0.0+x, 1.0+y, 0.0+z,
+			1.0+x, 1.0+y, 0.0+z,
+			0.0+x, 1.0+y, -1.0+z,
+			1.0+x, 1.0+y, -1.0+z,
+			//bottom face
+			0.0+x, 0.0+y, 0.0+z,
+			1.0+x, 0.0+y, 0.0+z,
+			0.0+x, 0.0+y, -1.0+z,
+			1.0+x, 0.0+y, -1.0+z
+		];
+	
+		var cubeIndices = [
+			//front
+			0,1,3,
+			0,3,2,
+			//back
+			4,5,7,
+			4,7,6,
+			//left
+			8,9,11,
+			8,11,10,
+			//right
+			12,13,15,
+			12,15,14,
+			//top
+			16,17,19,
+			16,19,18,
+			//bottom
+			20,21,23,
+			20,23,22
+		];
+		
+		var cubeColors = [];
+		
+		for(var i=0; i<cubeIndices.length; i++){
+			cubeColors.push( 1.0 );
+			cubeColors.push( 0.0 );
+			cubeColors.push( 1.0 );
+		}
+		var cubeNormals = [
+		//front
+		0.0+x, 0.0+y, 1.0+z,
+		0.0+x, 0.0+y, 1.0+z,
+		0.0+x, 0.0+y, 1.0+z,
+		0.0+x, 0.0+y, 1.0+z,
+		//back
+		0.0+x, 0.0+y, -1.0+z,
+		0.0+x, 0.0+y, -1.0+z,
+		0.0+x, 0.0+y, -1.0+z,
+		0.0+x, 0.0+y, -1.0+z,
+		//right
+		1.0+x, 0.0+y, 0.0+z,
+		1.0+x, 0.0+y, 0.0+z,
+		1.0+x, 0.0+y, 0.0+z,
+		1.0+x, 0.0+y, 0.0+z,
+		//left
+		-1.0+x, 0.0+y, 0.0+z,
+		-1.0+x, 0.0+y, 0.0+z,
+		-1.0+x, 0.0+y, 0.0+z,
+		-1.0+x, 0.0+y, 0.0+z,
+		//top
+		0.0+x, 1.0+y, 0.0+z,
+		0.0+x, 1.0+y, 0.0+z,
+		0.0+x, 1.0+y, 0.0+z,
+		0.0+x, 1.0+y, 0.0+z,
+		//bottom
+		0.0+x, -1.0+y, 0.0+z,
+		0.0+x, -1.0+y, 0.0+z,
+		0.0+x, -1.0+y, 0.0+z,
+		0.0+x, -1.0+y, 0.0+z,
+		];
+		
+		cubePositionBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, cubePositionBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertices), gl.STATIC_DRAW);
+		
+		cubeColorBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, cubeColorBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeColors), gl.STATIC_DRAW);
+		
+		cubeNormalBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, cubeNormalBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeNormals), gl.STATIC_DRAW);
+		
+		cubeIndexBuffer = gl.createBuffer();
+		cubeIndexBuffer.points = cubeIndices.length;
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIndexBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeIndices), gl.STATIC_DRAW);
+		
+		drawScene();
+	}
+	
+	
+	
+	
+	
+	function drawScene(){
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, cubePositionBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0 ,0);
+		
+		vertexColorAttribute = gl.getAttribLocation(glProgram, 'aVertexColor');
+		gl.enableVertexAttribArray(vertexColorAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, cubeColorBuffer);
+		gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		vertexNormalAttribute = gl.getAttribLocation(glProgram, 'aVertexNormal');
+		gl.enableVertexAttribArray(vertexNormalAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, cubeNormalBuffer);
+		gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIndexBuffer);
+		gl.drawElements(gl.TRIANGLES, cubeIndexBuffer.points, gl.UNSIGNED_SHORT, 0);
+		//gl.drawArrays(gl.TRIANGLES, 0, 24);
+	}
+	
+	
+	
+	
+	
+	function getMatrixUniforms(){
+	    glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, 'uPMatrix');
+	    glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, 'uMVMatrix');
+		glProgram.normalMatrixUniform = gl.getUniformLocation(glProgram, 'uNormalMatrix');
+		
+		glProgram.uLightDirection = gl.getUniformLocation(glProgram, 'uLightDirection');
+		glProgram.uShininess = gl.getUniformLocation(glProgram, 'uShininess');
+		
+		glProgram.uLightDiffuse  = gl.getUniformLocation(glProgram, 'uLightDiffuse');
+		glProgram.uLightAmbient  = gl.getUniformLocation(glProgram, 'uLightAmbient');
+		glProgram.uLightSpecular = gl.getUniformLocation(glProgram, 'uLightSpecular');
+		
+		glProgram.uMaterialDiffuse  = gl.getUniformLocation(glProgram, 'uMaterialDiffuse');
+		glProgram.uMaterialAmbient  = gl.getUniformLocation(glProgram, 'uMaterialAmbient');
+		glProgram.uMaterialSpecular = gl.getUniformLocation(glProgram, 'uMaterialSpecular');
+	}
+	
+	function setMatrixUniforms(){
+	    gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+	    gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+		gl.uniformMatrix4fv(glProgram.normalMatrixUniform, false, normalMatrix);
+	}
+	
+	
+	
+	function setupLights(){
+		
+		//var a = document.getElementById('a');
+		//var d = parseInt(a.value);
+		gl.uniform3fv(glProgram.uLightDirection, [0.0, -4.0, -5.0]);
+		gl.uniform1f(glProgram.uShininess, 20.0);
+		
+		gl.uniform4fv(glProgram.uLightDiffuse, [0.4, 0.4, 0.8, 1.0]);
+		gl.uniform4fv(glProgram.uLightAmbient, [0.8, 0.4, 0.4, 1.0]);
+		gl.uniform4fv(glProgram.uLightSpecular, [1.0, 1.0, 1.0, 1.0]);
+		
+		gl.uniform4fv(glProgram.uMaterialDiffuse, [0.4, 0.4, 0.8, 1.0]);
+		gl.uniform4fv(glProgram.uMaterialAmbient, [0.4, 0.4, 0.4, 1.0]);
+		gl.uniform4fv(glProgram.uMaterialSpecular, [1.0, 1.0, 1.0, 1.0]);
+	}
+
+	
+</script>
+
+
+
+
+</head>
+	<body onload='initWebGL()'>
+		<canvas id='canvas' width='600' height='400'></canvas>
+	</body>
+</html>

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>sphere Lighting</title>
+
+<style>
+
+body{background-color: #dddddd;}
+canvas{
+position: fixed;
+background-color: #ffffff;
+top: 50%; left: 50%;
+margin-top: -150px; margin-left: -200px;
+}
+
+</style>
+
+<script src='raf_polyfill.js'></script>
+
+
+
+<script src='gl-matrix-min.js'></script>
+
+
+
+
+<script id='shader-vs' type='x-shader/x-vertex'>
+	attribute vec3 aVertexPosition;
+	attribute vec3 aVertexNormal;
+	
+	uniform mat4 uMVMatrix;
+	uniform mat4 uPMatrix;
+	uniform mat4 uNormalMatrix;
+
+	varying vec3 vEyeVec;
+	varying vec3 vNormal;
+	void main(void){
+		vec4 vertex = uMVMatrix * vec4(aVertexPosition, 1.0);	  	//transformed vertex position
+		vNormal = vec3(uNormalMatrix * vec4(aVertexNormal, 1.0));	//transformed normal position
+		vEyeVec = -vec3(vertex.xyz);								//vector eye
+		gl_Position = uPMatrix * vertex;							//final vertex position
+	}
+</script>
+
+
+
+
+<script id='shader-fs' type='x-shader/x-fragment'>
+	#ifdef GL_ES
+	precision highp float;
+	#endif	
+	
+	uniform vec3 uLightDirection;	//incoming light source direction
+	uniform float uShininess;		//shininess*
+	
+	uniform vec4 uLightDiffuse;		//light diffuse component
+	uniform vec4 uLightAmbient;		//light ambient property*
+	uniform vec4 uLightSpecular;	//light specular property*
+	
+	uniform vec4 uMaterialDiffuse;	//material diffuse color
+	uniform vec4 uMaterialAmbient;	//oject ambient property*
+	uniform vec4 uMaterialSpecular; //object specular property*
+	
+	varying vec3 vEyeVec;
+	varying vec3 vNormal;
+	
+	void main(void){
+
+		vec3 N = normalize(vNormal);							
+		vec3 L = normalize(uLightDirection);				     //normalize light to calculate lambertTerm
+		float lambertTerm = dot(N,-L);					 		 //Lambert's cosine Law
+		
+		vec4 Ia = uLightAmbient * uMaterialAmbient;				 //ambient term
+		vec4 Id = vec4(0.0, 0.0, 0.0, 1.0); 					 //diffuse term
+		vec4 Is = vec4(0.0, 0.0, 0.0, 1.0); 					 //specular term
+		
+		
+		if(lambertTerm > 0.0){									 //only if LambertTerm is positive
+			Id = uLightDiffuse * uMaterialDiffuse * lambertTerm; //add diffuse term
+			vec3 E = normalize(vEyeVec);
+			vec3 R = reflect(L, N);
+			float specular = pow( max(dot(R,E), 0.0), uShininess);
+			
+			Is = uLightSpecular * uMaterialSpecular * specular;	 //add specular term
+		}
+		//final vertex color = ambient + diffuse + specular 
+		vec4 finalColor = Ia + Id + Is;
+		finalColor.a = 1.0;
+		gl_FragColor = finalColor;
+	}
+</script>
+
+
+
+
+<script>
+
+	var gl = null,
+		canvas = null,
+		vertexShader = null,
+		fragmentShader = null,
+		glProgram = null;
+		
+	var vertexColorAttribute = null,
+		vertexPositionAttribute = null,
+		vertexNormalAttribute = null,
+		
+		sphereColorBuffer = null,
+		spherePositionBuffer = null,
+		sphereNormalBuffer = null,
+		sphereIndexBuffer = null;
+		
+	var mvMatrix = mat4.create(),
+		pMatrix  = mat4.create(),
+		normalMatrix = mat4.create();
+	
+	var angle = 0.0;
+	
+	function initWebGL(){
+		canvas = document.getElementById('canvas');
+		try{
+			gl = canvas.getContext('experimental-webgl') || canvas.getContext('webgl');
+		}catch(e){}
+		
+		if(gl){
+			initShaders();
+			setupBuffers();
+			getMatrixUniforms();
+			setupLights();
+			(function animLoop(){
+				setupWebGL();
+				setMatrixUniforms();
+				drawScene();
+				requestAnimationFrame(animLoop, canvas);
+			})();
+		}else{
+			alert('Error: Your browser does not appear to support WebGL');
+		}
+	}
+
+	
+	
+	
+	function setupWebGL(){
+		gl.clearColor(0.2, 0.2, 0.2, 1.0);
+		gl.clearDepth(100.0);//*
+		gl.enable(gl.DEPTH_TEST);
+		gl.depthFunc(gl.LEQUAL); //*
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		mat4.perspective(45, canvas.width/canvas.height, 0.1, 1000.0, pMatrix);
+		mat4.identity(mvMatrix);
+		mat4.translate(mvMatrix, [0.0, 0.0, -10.0]);
+		mat4.rotate(mvMatrix, angle, [0.5, 0.75, 0.0]);
+		
+		angle += 0.01;
+		
+		mat4.toInverseMat3(mvMatrix, normalMatrix);
+		mat3.transpose(normalMatrix);
+	}
+	
+	
+	
+	
+	function initShaders(){
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+			
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		vertexShader   = makeShader(vs_source, gl.VERTEX_SHADER);
+		
+		glProgram = gl.createProgram();
+		
+		gl.attachShader(glProgram, vertexShader);
+		gl.attachShader(glProgram, fragmentShader);
+		gl.linkProgram(glProgram);
+		
+		if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+			alert('Unable to initialize shader program.');
+		}
+		
+		gl.useProgram(glProgram);	
+	}
+	
+	
+	
+	
+	function makeShader(src, type){
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+			alert('Error compiling shader: ' + gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	
+	
+	
+	
+	var longitude = 30;
+	var latitude = 30;
+	var radius = 2;
+	
+	function setupBuffers(){
+	
+		var sphereVertices = [],
+			sphereVerticesColor = [],
+			sphereIndices = [],
+			sphereNormal = [];
+		
+		
+		for (var i=0; i<=latitude; i++){		
+			var sintheta = Math.sin(i * 2 * Math.PI / latitude);
+			var costheta = Math.cos(i * 2 * Math.PI / latitude);
+			
+			for (var j=0; j<=longitude; j++){
+				var sinphi = Math.sin(j * 2 * Math.PI / longitude);
+				var cosphi = Math.cos(j * 2 * Math.PI / longitude);
+				
+				var x = sintheta * cosphi;  
+				var y = costheta;
+				var z = sintheta * sinphi;
+				//var u = 1 - (j / longitude); textureCoordData.push(u);
+				//var v = 1 - (i / latitude); textureCoordData.push(v);
+				
+				sphereNormal.push(x);
+				sphereNormal.push(y);
+				sphereNormal.push(z);
+				sphereVerticesColor.push(0.8);
+				sphereVerticesColor.push(0.8);
+				sphereVerticesColor.push(0.8);
+				sphereVertices.push(radius * x);
+				sphereVertices.push(radius * y);
+				sphereVertices.push(radius * z);
+			}
+		}
+		
+		for (var i=0; i<latitude; i++){
+			for (var j=0; j<longitude; j++){
+				var first = (i * (longitude + 1)) + j;
+                var second = first + longitude + 1;
+                sphereIndices.push(first);
+                sphereIndices.push(second);
+                sphereIndices.push(first + 1);
+
+                sphereIndices.push(second);
+                sphereIndices.push(second + 1);
+                sphereIndices.push(first + 1);
+			}
+		}
+		
+		spherePositionBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, spherePositionBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertices), gl.STATIC_DRAW);
+		
+		sphereColorBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereColorBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVerticesColor), gl.STATIC_DRAW);
+	
+		sphereIndexBuffer = gl.createBuffer();
+		sphereIndexBuffer.num = sphereIndices.length;
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(sphereIndices), gl.STATIC_DRAW);
+		
+		//sphereNormal = utils.calculateNormals(sphereVertices, sphereIndices);
+		sphereNormalBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereNormalBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereNormal), gl.STATIC_DRAW);
+	}
+	
+	
+	
+	
+	
+	function drawScene(){
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, spherePositionBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0 ,0);
+		
+		vertexNormalAttribute = gl.getAttribLocation(glProgram, 'aVertexNormal');
+		gl.enableVertexAttribArray(vertexNormalAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereNormalBuffer);
+		gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0 ,0);
+		
+		vertexColorAttribute = gl.getAttribLocation(glProgram, 'aVertexColor');
+		gl.enableVertexAttribArray(vertexColorAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, sphereColorBuffer);
+		gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		gl.drawElements(gl.TRIANGLES, sphereIndexBuffer.num, gl.UNSIGNED_SHORT, 0);
+	}
+	
+	
+	
+	
+	function getMatrixUniforms(){
+		glProgram.pMatrixUniform  = gl.getUniformLocation(glProgram, "uPMatrix");
+		glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, "uMVMatrix");
+		glProgram.normalMatrixUniform = gl.getUniformLocation(glProgram, 'uNormalMatrix');
+		
+		//lighting
+		glProgram.uLightDirection = gl.getUniformLocation(glProgram, 'uLightDirection');
+		glProgram.uShininess = gl.getUniformLocation(glProgram, 'uShininess'); //*
+		
+		glProgram.uLightDiffuse	 = gl.getUniformLocation(glProgram, 'uLightDiffuse');
+		glProgram.uLightAmbient	 = gl.getUniformLocation(glProgram, 'uLightAmbient'); //*
+		glProgram.uLightSpecular = gl.getUniformLocation(glProgram, 'uLightSpecular'); //*
+
+		glProgram.uMaterialDiffuse	= gl.getUniformLocation(glProgram, 'uMaterialDiffuse');
+		glProgram.uMaterialAmbient	= gl.getUniformLocation(glProgram, 'uMaterialAmbient'); //*
+		glProgram.uMaterialSpecular = gl.getUniformLocation(glProgram, 'uMaterialSpecular'); //*	
+	}
+	
+	
+	
+	
+	function setMatrixUniforms() {
+		gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+		gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+		gl.uniformMatrix4fv(glProgram.normalMatrixUniform, false, normalMatrix);
+	}
+	
+	
+	
+	function setupLights(){
+		gl.uniform3fv(glProgram.uLightDirection, [-1.0, 0.0, -1.0]);
+		gl.uniform1f(glProgram.uShininess, 200.0); //*
+		
+		gl.uniform4fv(glProgram.uLightDiffuse, [1.0, 1.0, 1.0, 1.0]);
+		gl.uniform4fv(glProgram.uLightAmbient, [0.03, 0.03, 0.03, 1.0]); //*
+		gl.uniform4fv(glProgram.uLightSpecular, [1.0, 1.0, 1.0, 1.0]); //*
+		
+		gl.uniform4fv(glProgram.uMaterialDiffuse, [0.8, 0.1, 0.1, 1.0]);
+		gl.uniform4fv(glProgram.uMaterialAmbient, [1.0,1.0,1.0,1.0]); //*
+		gl.uniform4fv(glProgram.uMaterialSpecular,[1.0,1.0,1.0,1.0]); //*
+
+		
+	}
+</script>
+
+
+
+
+</head>
+
+
+	<body onload='initWebGL()'>
+		<h3>Phong Shading + Phong Reflection Model</h3>
+		<canvas id='canvas' width='400' height='300'></canvas>
+		<div></div>
+	</body>
+</html>

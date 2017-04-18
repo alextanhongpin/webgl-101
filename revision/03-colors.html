@@ -1,0 +1,164 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-type" content="text/html; charset=utf-8">
+		<title>01-webgl-context</title>
+		<style type="text/css" media="screen">
+			
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		
+		canvas {
+			display: block;
+		}
+		
+		</style>
+	</head>
+	<body onload="initWebGL();">
+		<canvas id='canvas'>This browser does not have support for Canvas API.</canvas>
+		
+		<script type="text/javascript">
+			
+		'use strict';
+		
+		let gl = null;
+		let program = null;
+		let canvas = null;
+		let fragmentShader = null;
+		let vertexShader = null;
+		
+		
+		let b_vertex = null;
+		let b_color = null;
+		
+		let attributeList = ['aVertexPosition', 'aVertexColor'];
+		let attribute = [];
+		function initWebGL () {
+			canvas = document.getElementById('canvas');
+			canvas.height = window.innerHeight;
+			canvas.width = window.innerWidth;
+			
+			try {
+				gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+			} catch (e) {}
+			if (gl) {
+				// carry out functions here
+				setupWebGL();
+				initShaders();
+				setupBuffers();
+				loadAttributes();
+				drawScene();
+			} else {
+				alert('Error: Your browser does not support WebGL.');
+			}
+		}
+		
+		function setupWebGL () {
+			gl.clearColor(.8, .8, .8, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			gl.viewport(0, 0, canvas.width, canvas.height);
+		}
+		
+		function makeShader (src, type) {
+			// type: gl.VERTEX_SHADER, gl.FRAGMENT_SHADER
+			let shader = gl.createShader(type);
+			gl.shaderSource(shader, src);
+			gl.compileShader(shader);
+			
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+				alert('Error compiling shader: ' + gl.getShaderInfoLog(shader));
+			}
+			return shader;
+		}
+		
+		function initShaders () {
+			let vs_source = `
+				attribute vec3 aVertexPosition;
+				attribute vec3 aVertexColor;
+				
+				varying highp vec4 vColor;
+				void main(void) {
+					gl_Position = vec4(aVertexPosition, 1.0);
+					vColor = vec4(aVertexColor, 1.0);
+				}`;
+				
+			let fs_source = `
+				varying highp vec4 vColor;
+				void main (void) {
+					gl_FragColor = vColor;
+				}`;
+			
+			vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+			fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+			
+			program = gl.createProgram();
+			
+			gl.attachShader(program, vertexShader);
+			gl.attachShader(program, fragmentShader);
+			gl.linkProgram(program);
+			
+			if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+				alert('Unable to initialize the shader program.');
+			}
+			gl.useProgram(program);
+		}
+		
+		function setupBuffers () {
+			let vertices = [
+        //left triangle
+        -0.5, 0.5, 0.0,
+        0.0, 0.0, 0.0, 
+        0.5, 0.5, 0.0,
+        //right triangle
+        -0.5, -0.5, 0.0,
+        0.0, 0.0, 0.0,
+        0.5, -0.5, 0.0
+			];
+			
+			let verticesColor = [
+				// blue
+				0.0, 0.0, 1.0,
+				// white
+				1.0, 1.0, 1.0,
+				// blue
+				0.0, 0.0, 1.0,
+				// red
+				1.0, 0.0, 0.0,
+				// white
+				1.0, 1.0, 1.0,
+				// red
+				1.0, 0.0, 0.0,
+			];
+			
+			b_vertex = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, b_vertex);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+			
+			b_color = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, b_color);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesColor), gl.STATIC_DRAW);
+		}
+		
+		function loadAttributes () {
+			for (let i = 0; i < attributeList.length; i++) {
+				let attr = attributeList[i];
+				attribute[attr] = gl.getAttribLocation(program, attr);
+				gl.enableVertexAttribArray(attribute[attr]);
+			}
+		}
+		function drawScene () {
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, b_vertex);
+			gl.vertexAttribPointer(attribute['aVertexPosition'], 3, gl.FLOAT, false, 0, 0);
+			
+			gl.bindBuffer(gl.ARRAY_BUFFER, b_color);
+			gl.vertexAttribPointer(attribute['aVertexColor'], 3, gl.FLOAT, false, 0, 0);
+			gl.drawArrays(gl.TRIANGLES, 0, 6);
+		}
+		
+		</script>
+	</body>
+</html>

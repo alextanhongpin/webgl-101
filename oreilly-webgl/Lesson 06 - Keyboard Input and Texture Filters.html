@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Keyboard Input and Texture Filters</title>
+
+<style>
+
+body{
+	background-color: #dddddd;
+}
+
+canvas{
+	position: fixed;
+	background-color: #ffffff;
+	top: 50%; left: 50%;
+	margin-top: -200px; margin-left: -200px;
+}
+
+</style>
+
+
+
+
+<script src='gl-matrix-min.js'></script>
+<script src='raf_polyfill.js'></script>
+
+
+<script id='shader-vs' type='x-shader/x-vertex'>
+	attribute vec3 aVertexPosition;
+	attribute vec2 aTextureCoord;
+	
+	uniform mat4 uMVMatrix;
+	uniform mat4 uPMatrix;
+	
+	varying vec2 vTextureCoord;
+	
+	void main(void){
+		gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		vTextureCoord = aTextureCoord;
+	}
+</script>
+
+
+
+
+<script id='shader-fs' type='x-shader/x-fragment'>
+	precision mediump float;
+	varying vec2 vTextureCoord;
+	uniform sampler2D uSampler;
+	void main(void){
+		gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	}
+</script>
+
+
+
+
+<script>
+
+	var canvas = null,
+		gl = null,
+		vertexShader = null,
+		fragmentShader = null,
+		glProgram = null;
+		
+	var vertexPositionAttribute = null,
+		vertexTextureAttribute = null,
+		
+		squareVertexPositionBuffer = null,
+		squareVertexIndexBuffer = null,
+		squareVertexTextureBuffer = null;
+	
+	var mvMatrix = mat4.create(),
+		pMatrix  = mat4.create();
+		
+	var mvMatrixStack = new Array();
+	
+	var angleX = 0.00,
+		angleY = 0.00;
+		
+	var z = -7.0;
+	
+	function webGLStart(){
+		canvas = document.getElementById('canvas');
+		try{
+			gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+		}catch(e){}
+		
+		if(gl){
+			
+			setupBuffers();
+			initShaders();
+			setupTexture();
+			(function animLoop(){
+				setupWebGL();
+				getMatrixUniforms();
+				drawScene();
+				requestAnimationFrame(animLoop, canvas);
+			})();
+		}else{
+			alert('Error: Your browser does not support WebGL');
+		}
+	}
+	
+	
+	
+	
+	function setupWebGL(){
+		gl.clearColor(0.0, 0.0, 0.0, 1.0);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		gl.enable(gl.DEPTH_TEST);
+		
+		gl.viewport(0, 0, canvas.width, canvas.height);
+		mat4.perspective(45, canvas.width/canvas.height, 0.1, 100.0, pMatrix);
+		mat4.identity(mvMatrix);
+				
+	}
+	
+	
+	
+	function initShaders(){
+		var fs_source = document.getElementById('shader-fs').innerHTML,
+			vs_source = document.getElementById('shader-vs').innerHTML;
+		
+		fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+		vertexShader   = makeShader(vs_source, gl.VERTEX_SHADER);
+		
+		glProgram = gl.createProgram();
+		
+		gl.attachShader(glProgram, vertexShader);
+		gl.attachShader(glProgram, fragmentShader);
+		gl.linkProgram(glProgram);
+		
+		if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+			alert('Unable to initialize the shader program');
+		}
+		
+		gl.useProgram(glProgram);
+	}
+	
+	
+	function makeShader(src, type){
+		var shader = gl.createShader(type);
+		gl.shaderSource(shader, src);
+		gl.compileShader(shader);
+		
+		if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+			alert('Error compiling shader: ' + gl.getShaderInfoLog(shader));
+		}
+		return shader;
+	}
+	
+	
+	
+	function setupBuffers(){
+		var squareVertices = [
+			// Front face
+            -1.0, -1.0,  1.0,
+             1.0, -1.0,  1.0,
+             1.0,  1.0,  1.0,
+            -1.0,  1.0,  1.0,
+
+            // Back face
+            -1.0, -1.0, -1.0,
+            -1.0,  1.0, -1.0,
+             1.0,  1.0, -1.0,
+             1.0, -1.0, -1.0,
+
+            // Top face
+            -1.0,  1.0, -1.0,
+            -1.0,  1.0,  1.0,
+             1.0,  1.0,  1.0,
+             1.0,  1.0, -1.0,
+
+            // Bottom face
+            -1.0, -1.0, -1.0,
+             1.0, -1.0, -1.0,
+             1.0, -1.0,  1.0,
+            -1.0, -1.0,  1.0,
+
+            // Right face
+             1.0, -1.0, -1.0,
+             1.0,  1.0, -1.0,
+             1.0,  1.0,  1.0,
+             1.0, -1.0,  1.0,
+
+            // Left face
+            -1.0, -1.0, -1.0,
+            -1.0, -1.0,  1.0,
+            -1.0,  1.0,  1.0,
+            -1.0,  1.0, -1.0
+		];
+		squareVertexPositionBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(squareVertices), gl.STATIC_DRAW);
+		
+		var squareTextureVertices = [
+			  // Front face
+			  0.0, 0.0,
+			  1.0, 0.0,
+			  1.0, 1.0,
+			  0.0, 1.0,
+
+			  // Back face
+			  1.0, 0.0,
+			  1.0, 1.0,
+			  0.0, 1.0,
+			  0.0, 0.0,
+
+			  // Top face
+			  0.0, 1.0,
+			  0.0, 0.0,
+			  1.0, 0.0,
+			  1.0, 1.0,
+
+			  // Bottom face
+			  1.0, 1.0,
+			  0.0, 1.0,
+			  0.0, 0.0,
+			  1.0, 0.0,
+
+			  // Right face
+			  1.0, 0.0,
+			  1.0, 1.0,
+			  0.0, 1.0,
+			  0.0, 0.0,
+
+			  // Left face
+			  0.0, 0.0,
+			  1.0, 0.0,
+			  1.0, 1.0,
+			  0.0, 1.0,
+		];
+		
+		squareVertexTextureBuffer = gl.createBuffer();
+		squareVertexTextureBuffer.number_vertex_points = squareTextureVertices.length;
+		gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexTextureBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(squareTextureVertices), gl.STATIC_DRAW);
+		
+		var squareVertexIndices = [
+            0, 1, 2,      0, 2, 3,    // Front face
+            4, 5, 6,      4, 6, 7,    // Back face
+            8, 9, 10,     8, 10, 11,  // Top face
+            12, 13, 14,   12, 14, 15, // Bottom face
+            16, 17, 18,   16, 18, 19, // Right face
+            20, 21, 22,   20, 22, 23  // Left face
+		];
+		
+		squareVertexIndexBuffer = gl.createBuffer();
+		squareVertexIndexBuffer.number_vertex_points = squareVertexIndices.length;
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, squareVertexIndexBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(squareVertexIndices), gl.STATIC_DRAW);
+	}
+	
+	
+	
+	
+	function drawScene(){
+		//vertex buffer	
+		vertexPositionAttribute = gl.getAttribLocation(glProgram, 'aVertexPosition');
+		gl.enableVertexAttribArray(vertexPositionAttribute);
+		gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+		gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+		
+		
+		//texture buffer
+		vertexTextureAttribute = gl.getAttribLocation(glProgram, 'aTextureCoord');
+		gl.enableVertexAttribArray(vertexTextureAttribute);		
+		gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexTextureBuffer);
+		gl.vertexAttribPointer(vertexTextureAttribute, 2, gl.FLOAT, false, 0, 0);
+		
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, boxTexture);
+		gl.uniform1i(glProgram.samplerUniform, 0);
+		
+		mat4.translate(mvMatrix, [0.0, 0.0, z]);
+		mvPushMatrix();
+		mat4.rotate(mvMatrix, angleX, [0.0, 1.0, 0.0]);
+		mat4.rotate(mvMatrix, angleY, [1.0, 0.0, 0.0]);
+
+		
+		
+		
+		
+	document.onkeydown = function(event){
+		var key = event.keyCode;
+		switch(key){
+			case 33: z+=0.5; break;
+			case 34: z-=0.5; break;
+			case 37: angleX -= 0.1; break;
+			case 38: angleY -= 0.1; break;
+			case 39: angleX += 0.1; break;
+			case 40: angleY += 0.1; break;
+		}
+		
+	}		
+		
+		
+		
+		
+		
+		//indices buffer
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, squareVertexIndexBuffer);
+		setMatrixUniforms();
+		gl.drawElements(gl.TRIANGLES, squareVertexIndexBuffer.number_vertex_points, gl.UNSIGNED_SHORT, 0);
+		mvPopMatrix();
+	}
+
+	
+	
+	
+	function getMatrixUniforms(){
+	    glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, 'uPMatrix');
+	    glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, 'uMVMatrix');
+		glProgram.samplerUniform = gl.getUniformLocation(glProgram, "uSampler");
+	}
+	
+	
+	
+	
+	
+	function setMatrixUniforms(){
+	    gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+	    gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+	}
+	
+	
+	
+	
+	function mvPushMatrix(){
+		var copy = mat4.create();
+		mat4.set(mvMatrix, copy);
+		mvMatrixStack.push(copy);
+	}
+	
+	
+	
+	function mvPopMatrix(){
+		if(mvMatrixStack.length == 0){
+			throw 'Invalid popMatrix';
+		}
+		mvMatrix = mvMatrixStack.pop();
+	}
+	
+
+   
+	
+	var boxTexture;
+	function setupTexture(){
+		boxTexture = gl.createTexture();
+		boxTexture.image = new Image();
+		//boxTexture.image.crossOrigin = 'anonymous';
+		boxTexture.image.onload = function(){
+			handleLoadedTexture(boxTexture);
+		}
+		boxTexture.image.src = 'box.jpg';
+	}
+	
+	
+	
+	
+	function handleLoadedTexture(texture){
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.bindTexture(gl.TEXTURE_2D, null);
+	}
+	
+	
+	
+	
+	
+</script>
+
+</head>
+
+<body onload = 'webGLStart()'>
+	<canvas id='canvas' width='400' height='400'></canvas>
+</body>
+</html>

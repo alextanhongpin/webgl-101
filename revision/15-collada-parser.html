@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-type" content="text/html; charset=utf-8">
+		<title>01-webgl-context</title>
+		<style type="text/css" media="screen">
+			
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		
+		canvas {
+			display: block;
+		}
+		
+		</style>
+	</head>
+	<body>
+		
+		<div id='save'>Hallo</div>
+		
+		<p>Vertices:</p>
+		<div id='vertices'></div>
+		
+		<p>Indices: </p>
+		<div id='indices'></div>
+		
+		<script type="text/javascript">
+			
+		'use strict';
+		
+		var xmlhttp;
+		
+		if (window.XMLHttpRequest) {
+			// IE7+, Firefox, Chrome, Opera
+			xmlhttp = new XMLHttpRequest();
+		} else {
+			// code for IE5, IE6
+			xmlhttp = new ActiveXObject('Microsoft.XMLHTTP');
+		};
+		
+		// open(method, url, async);
+		xmlhttp.open('GET', '/models/sphere.dae', true);
+		xmlhttp.overrideMimeType('text/xml');
+		xmlhttp.send();
+		
+		xmlhttp.onreadystatechange=function()
+	  {
+	  if (xmlhttp.readyState==4 && xmlhttp.status==200)
+	    {
+				/*var objectData = xmlhttp.responseText;
+				
+				var lines = objectData.split('\n');
+				
+				var VERTEX_RE = /^v\s/;
+				    var NORMAL_RE = /^vn\s/;
+				    var TEXTURE_RE = /^vt\s/;
+				    var FACE_RE = /^f\s/;
+				    var WHITESPACE_RE = /\s+/;
+				
+						var indices = [];
+						var vertices = [];
+						var texture = [];
+						var normals = [];
+				
+				for (var i = 0; i < lines.length; i++) {
+					var line = lines[i].trim();
+					line = line.split(' ');
+					var first = line.shift();
+					
+					if (first == 'f') {
+						// face
+						for (var j = 0; j < line.length; j++) {
+							var group = line[j].split('/');
+							indices.push(group[0] - 1);
+							texture.push(parseFloat(group[1]));
+							normals.push(parseFloat(group[2]));
+						}
+					}
+					
+					if (first == 'v') {
+						for (var v = 0; v < line.length; v++) {
+							var group = line[v].split('/');
+							vertices.push(group[0] - 1);
+							texture.push(parseFloat(group[1]));
+							normals.push(parseFloat(group[2]));
+						}
+					}
+				}
+				var data = {
+					vertices: vertices,
+					indices: indices
+				}
+				console.log(data)
+				var download = 'text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data));
+				document.querySelector('#save').innerHTML = '<a href="data:' + download + '" download="data.json">download</a>';
+				*/
+				
+				var respond = xmlhttp.responseXML;
+				
+				var geometries = respond.querySelector('library_geometries');
+				console.log(respond)
+				var vertices = geometries.querySelector('mesh source:nth-child(1) float_array').innerHTML;
+				vertices = vertices.split(' ').map(function (x) {
+					return parseFloat(x);
+				});
+				document.getElementById('vertices').innerHTML = vertices;
+				console.log(vertices.length)
+				
+				var normals = geometries.querySelector('mesh source:nth-child(2) float_array').innerHTML;
+				normals = normals.split(' ').map(function (x) {
+					return parseFloat(x);
+				});
+				
+				var indices = geometries.querySelector('polylist p').innerHTML;
+				indices = indices.split(' ').map(function (x) {
+					return parseFloat(x);
+				});
+				
+				var indClean = [];
+				for (var i = 0; i < indices.length; i++) {
+					if (i %  2 == 0) indClean.push(indices[i]);
+				}
+				indices = indClean;
+				document.getElementById('indices').innerHTML = indices;
+				var geometries = respond.querySelector('library_effects');
+				
+				console.log(data)
+				var data = {
+					vertices: vertices,
+					normals: normals,
+					indices: indices
+				}
+				console.log(data)
+				var download = 'text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data));
+				document.querySelector('#save').innerHTML = '<a href="data:' + download + '" download="data.json">download</a>';
+				
+	    }
+	  }
+		
+		
+		
+		
+		
+		
+		</script>
+	</body>
+</html>
